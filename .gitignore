@@ -1,0 +1,6 @@
+config.py
+main.db
+__pycache__/
+cogs/__pycache__/
+poetry.lock
+pyproject.toml
