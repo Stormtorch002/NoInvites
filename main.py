@@ -1,42 +1,62 @@
 from discord.ext import commands 
-from config import TOKEN 
-import aiosqlite3
+from config import TOKEN
+from cogs.listeners import Listeners
+import discord
+import postgres
 import asyncio
 
-open('./main.db', 'a+') # creates if not exists 
+
+STORMTORCH = 553058885418876928
 
 async def load_prefixes():
-    async with db.cursor() as cur:
-        prefixes = {}
-        query = 'SELECT guild_id, prefix FROM prefixes'
-        await cur.execute(query)
-        rows = await cur.fetchall()
+    await postgres.create_tables()
+    prefixes = {}
+    query = 'SELECT guild_id, prefix FROM prefixes'
+    res = await postgres.fetchall(query)
 
-        for row in rows:
-            prefixes[row[0]] = row[1]
-        
-        return prefixes
+    for row in res:
+        prefixes[row[0]] = row[1]
 
-cached_prefixes = loop.run_until_complete(load_prefixes())
+    return prefixes
+
+cached_prefixes = asyncio.get_event_loop().run_until_complete(load_prefixes())
+
 
 def get_prefix(client, message):
-    prefix = cached_prefixes.get(message.guild.id)
+    prefix = client.prefixes.get(message.guild.id)
     prefix = prefix if prefix else 'ii!'
     return prefix
 
+
 bot = commands.Bot(command_prefix=get_prefix)
-bot.db = db
-bot.prefixes = cached_prefixes # botvar with all cached prefixes
-bot.load_extension('cogs.config')
-bot.load_extension('cogs.listeners')
+bot.prefixes = cached_prefixes  # botvar with all cached prefixes
+cogs = (
+    'cogs.config',
+    'cogs.listeners',
+    'jishaku'
+)
+[bot.load_extension(cog) for cog in cogs]
+
 
 @bot.command()
 async def stupid(ctx):
     await ctx.send('stormtorch is stupid :thumbsup:')
 
-@bot.command()
-async def rank(ctx):
-    await ctx.send('ok listen boi you have no invites.')
 
-bot.run(TOKEN)
-# what was that?
+@bot.command(name='eval')
+async def _eval(ctx, *, code):
+    if ctx.author.id != STORMTORCH:
+        return await ctx.send('no u')
+    code = '\n'.join([f'    {line}' for line in code.splitlines()])
+    exec(
+        f'async def __ex(ctx, bot):\n' +
+        code
+    )
+    try:
+        await locals()['__ex'](ctx, bot)
+        await ctx.message.add_reaction('\U00002705')
+    except Exception as e:
+        await ctx.send(f'```diff\n- {e}```')
+
+if __name__ == '__main__':
+    bot.run(TOKEN)
