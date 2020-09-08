@@ -2,17 +2,18 @@ from discord.ext import commands
 import postgres
 import discord
 import asyncio
+from typing import Union
 
 
-async def get_total_invites(member):
+async def get_total_invites(member, guild):
     query = 'SELECT joins, leaves, bonus FROM invites WHERE guild_id = $1 AND member_id = $2'
-    res = await postgres.fetchone(query, member.guild.id, member.id)
+    res = await postgres.fetchone(query, guild.id, member.id)
     joins, leaves, bonus = res['joins'], res['leaves'], res['bonus']
     return joins - leaves + bonus
 
 
-async def update_join_ranks(member):
-    invites = get_total_invites(member)
+async def update_join_ranks(member, guild):
+    invites = await get_total_invites(member, guild)
     query = 'SELECT role_id, invites FROM ranks ' \
             'WHERE guild_id = $1 AND invites <= $2 ORDER BY invites'
     res = await postgres.fetchall(query, member.guild.id, invites)
@@ -71,20 +72,32 @@ class Ranks(commands.Cog):
         res = await postgres.fetchone(query, ctx.guild.id, member.id)
         if not res:
             return await ctx.send('You have no invites.')
-        total = get_total_invites(res)
+
+        total = await get_total_invites(member, member.guild)
+        query = 'SELECT invites, role_id FROM ranks WHERE invites > $1 ORDER BY invites'
+        res2 = await postgres.fetchone(query, total)
+        text = ''
+        if res2:
+            role = ctx.guild.get_role(res2['role_id'])
+            if role:
+                remaining = res2['invites'] - total
+                text = f'**{remaining}** Invites to {role.mention}'
+
         embed = discord.Embed(
             color=member.color,
-            title=f'You have {total} invites',
+            title=f'{total} Invites',
+            description=f'**Joins:** `{res["joins"]}`\n'
+                        f'**Leaves:** `{res["leaves"]}`\n'
+                        f'**Bonuses:** `{res["bonus"]}`\n\n'
+                        + text
         )
+        embed.add_field(name='Rank', value=f'**{res["rank"]}**')
+        embed.set_thumbnail(url=str(ctx.guild.icon_url_as(format='png')))
         embed.set_author(name=str(member), icon_url=str(member.avatar_url_as(format='png')))
-        embed.add_field(name='Rank', value=str(res['rank']))
-        embed.add_field(name='Joins', value=str(res['joins']))
-        embed.add_field(name='Leaves', value=str(res['leaves']))
-        embed.add_field(name='Bonuses', value=str(res['bonus']))
-        await update_join_ranks(member)
+        await update_join_ranks(member, member.guild)
         await ctx.send(embed=embed)
 
-    @commands.command()
+    @commands.command(aliases=['createrank'])
     @commands.has_guild_permissions(administrator=True)
     async def addrank(self, ctx):
 
@@ -92,30 +105,54 @@ class Ranks(commands.Cog):
             return m.author == ctx.author and m.channel == ctx.channel
 
         await ctx.send('What role should people get when they reach this rank?')
-
         try:
             role = (await self.bot.wait_for('message', check=check, timeout=30)).content
         except asyncio.TimeoutError:
             return await ctx.send(f'{ctx.author.mention} wake up and try again')
-
         try:
-            role_id = (await commands.RoleConverter().convert(ctx, role)).id
+            role = await commands.RoleConverter().convert(ctx, role)
         except commands.BadArgument:
             return await ctx.send(f'Could not make a role out of `{role}`.')
+        query = 'SELECT id FROM ranks WHERE role_id = $1'
+        res = await postgres.fetchone(query, role.id)
+        if res:
+            return await ctx.send(f'An invite rank with `{role.name}` role already exists.')
 
         await ctx.send('How many invites do they need to get this rank?')
-
         try:
             invites = (await self.bot.wait_for('message', check=check, timeout=30)).content
         except asyncio.TimeoutError:
             return await ctx.send(f'{ctx.author.mention} wake up and try again')
-
         if not invites.isdigit() or int(invites) < 1:
             return await ctx.send(f'Invalid number of invites.')
+        query = 'SELECT id FROM ranks WHERE invites = $1 AND guild_id = $2'
+        res = await postgres.fetchone(query, int(invites), ctx.guild.id)
+        if res:
+            return await ctx.send(f'An invite rank with `{invites}` invites already exists.')
 
         query = 'INSERT INTO ranks (guild_id, invites, role_id) VALUES ($1, $2, $3)'
-        await postgres.execute(query, ctx.guild.id, invites, role_id)
+        await postgres.execute(query, ctx.guild.id, int(invites), role.id)
         await ctx.send(f'Created invite rank with role `{role.name}` and needs {invites} invites.')
+
+    @commands.command(aliases=['removerank'])
+    @commands.has_guild_permissions(administrator=True)
+    async def delrank(self, ctx, *, arg: Union[discord.Role, int]):
+        if isinstance(arg, int):
+            query = 'SELECT id FROM ranks WHERE guild_id = $1 AND invites = $2'
+            res = await postgres.fetchone(query, ctx.guild.id, arg)
+            if not res:
+                return await ctx.send(f'No rank with `{arg}` invites found.')
+            query = 'DELETE FROM ranks WHERE id = $1'
+            await postgres.execute(query, res['id'])
+            await ctx.send(f'Deleted rank with `{arg}` invites.')
+        else:
+            query = 'SELECT id FROM ranks WHERE guild_id = $1 AND role_id = $2'
+            res = await postgres.fetchone(query, ctx.guild.id, arg.id)
+            if not res:
+                return await ctx.send(f'No rank with role `{arg.name}` found.')
+            query = 'DELETE FROM ranks WHERE id = $1'
+            await postgres.execute(query, res['id'])
+            await ctx.send(f'Deleted rank with role `{arg.name}`.')
 
 
 def setup(bot):

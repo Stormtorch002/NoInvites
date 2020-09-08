@@ -33,6 +33,7 @@ bot.prefixes = cached_prefixes  # botvar with all cached prefixes
 cogs = (
     'cogs.config',
     'cogs.listeners',
+    'cogs.ranks',
     'jishaku'
 )
 [bot.load_extension(cog) for cog in cogs]

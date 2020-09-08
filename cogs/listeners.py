@@ -37,10 +37,29 @@ class Listeners(commands.Cog):
         query = 'INSERT INTO joins (guild_id, member_id, inviter_id) VALUES ($1, $2, $3)'
         await postgres.execute(query, member.guild.id, member.id, invite.inviter.id)
         query = 'INSERT INTO invites (guild_id, member_id, joins, leaves, bonus) ' \
-                'VALUES ($1, $2, $3, $4, $4) ' \
-                'ON CONFLICT (guild_id, member_id) DO UPDATE SET joins = joins + $3'
+                'VALUES ($1, $2, $3, $4, $4) ON CONFLICT (guild_id, member_id) ' \
+                'DO UPDATE SET joins = invites.joins + $3'
         await postgres.execute(query, member.guild.id, invite.inviter.id, 1, 0)
-        return ranks.get_total_invites(member)
+        return await ranks.get_total_invites(invite.inviter, member.guild)
+
+    async def send_member_message(self, member, inviter, invites, ch_type):
+        query = 'SELECT channel_id, message FROM channels WHERE type = $1 AND guild_id = $2'
+        res = await postgres.fetchone(query, ch_type, member.guild.id)
+        if res:
+            channel = self.bot.get_channel(res['channel_id'])
+            replacements = {
+                '{member.mention}': member.mention,
+                '{inviter.mention}': inviter.mention,
+                '{member}': str(member),
+                '{inviter}': str(inviter),
+                '{member.name}': member.name,
+                '{inviter.name}': inviter.name,
+                '{invites}': str(invites)
+            }
+            message = res['message']
+            for r in replacements:
+                message = message.replace(r, replacements[r])
+            return await channel.send(message)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -73,13 +92,10 @@ class Listeners(commands.Cog):
         invite = await self.track_invites(member)
         if invite:
             invites = await self.update_join_invites(invite, member)
-            await ranks.update_join_ranks(invite.inviter)
-            query = 'SELECT channel_id, message FROM channels WHERE type = $1 AND guild_id = $2'
-            res = await postgres.fetchone(query, 1, member.guild.id)
-            if res:
-                channel = self.bot.get_channel(res['channel_id'])
-                message = f'**{member}** joined; invited by **{invite.inviter}** ({invites} invites)'
-                await channel.send(message)
+            if invite.inviter.id in [m.id for m in member.guild.members]:
+                inviter = member.guild.get_member(invite.inviter.id)
+                await ranks.update_join_ranks(inviter, member.guild)
+            await self.send_member_message(member, invite.inviter, invites, 1)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
@@ -89,9 +105,13 @@ class Listeners(commands.Cog):
             inviter_id = res['inviter_id']
             query = 'UPDATE invites SET leaves = leaves + $1 WHERE guild_id = $2 AND member_id = $3'
             await postgres.execute(query, 1, member.guild.id, inviter_id)
-            inviter = member.guild.get_member(inviter_id)
-            if inviter:
-                await ranks.update_join_ranks(inviter)
+            inviter = self.bot.get_user(inviter_id)
+            inviter = inviter or await self.bot.fetch_user(inviter_id)
+            if inviter.id in [m.id for m in member.guild.members]:
+                inviter = member.guild.get_member(inviter.id)
+                await ranks.update_join_ranks(inviter, member.guild)
+            invites = await ranks.get_total_invites(inviter, member.guild)
+            await self.send_member_message(member, inviter, invites, 0)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -106,6 +126,10 @@ class Listeners(commands.Cog):
 
             await ctx.send(f'You do not have the following perms: `{perms}`. '
                            f'You need these to do `{ctx.prefix}{ctx.invoked_with}`.')
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(f'You are missing the `{error.param.name}` argument.')
+        elif isinstance(error, commands.BadArgument):
+            await ctx.send(error.args[0].replace('"', '`'))
         else:
             raise error
 
