@@ -22,6 +22,7 @@ class Listeners(commands.Cog):
         while old_i < old_length and new_i < new_length:
             if old_invites[old_i].id == new_invites[new_i].id:
                 if old_invites[old_i].uses != new_invites[new_i].uses:
+                    self.invites[member.guild] = new_invites
                     return new_invites[new_i]
                 else:
                     old_i += 1
@@ -94,7 +95,7 @@ class Listeners(commands.Cog):
             invites = await self.update_join_invites(invite, member)
             if invite.inviter.id in [m.id for m in member.guild.members]:
                 inviter = member.guild.get_member(invite.inviter.id)
-                await ranks.update_join_ranks(inviter, member.guild)
+                await ranks.update_join_ranks(inviter)
             await self.send_member_message(member, invite.inviter, invites, 1)
 
     @commands.Cog.listener()
@@ -109,7 +110,7 @@ class Listeners(commands.Cog):
             inviter = inviter or await self.bot.fetch_user(inviter_id)
             if inviter.id in [m.id for m in member.guild.members]:
                 inviter = member.guild.get_member(inviter.id)
-                await ranks.update_join_ranks(inviter, member.guild)
+                await ranks.update_join_ranks(inviter)
             invites = await ranks.get_total_invites(inviter, member.guild)
             await self.send_member_message(member, inviter, invites, 0)
 

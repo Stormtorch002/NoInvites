@@ -5,15 +5,19 @@ import asyncio
 from typing import Union
 
 
-async def get_total_invites(member, guild):
-    query = 'SELECT joins, leaves, bonus FROM invites WHERE guild_id = $1 AND member_id = $2'
-    res = await postgres.fetchone(query, guild.id, member.id)
-    joins, leaves, bonus = res['joins'], res['leaves'], res['bonus']
+def from_record(record):
+    joins, leaves, bonus = record['joins'], record['leaves'], record['bonus']
     return joins - leaves + bonus
 
 
-async def update_join_ranks(member, guild):
-    invites = await get_total_invites(member, guild)
+async def get_total_invites(user, guild):
+    query = 'SELECT joins, leaves, bonus FROM invites WHERE guild_id = $1 AND member_id = $2'
+    res = await postgres.fetchone(query, guild.id, user.id)
+    return from_record(res)
+
+
+async def update_join_ranks(member):
+    invites = await get_total_invites(member, member.guild)
     query = 'SELECT role_id, invites FROM ranks ' \
             'WHERE guild_id = $1 AND invites <= $2 ORDER BY invites'
     res = await postgres.fetchall(query, member.guild.id, invites)
@@ -94,7 +98,32 @@ class Ranks(commands.Cog):
         embed.add_field(name='Rank', value=f'**{res["rank"]}**')
         embed.set_thumbnail(url=str(ctx.guild.icon_url_as(format='png')))
         embed.set_author(name=str(member), icon_url=str(member.avatar_url_as(format='png')))
-        await update_join_ranks(member, member.guild)
+        await update_join_ranks(member)
+        await ctx.send(embed=embed)
+
+    @commands.command(aliases=['leaderboard', 'top'])
+    async def lb(self, ctx, page: int = 1):
+        query = 'SELECT member_id, joins, leaves, bonus, ' \
+                'RANK () OVER (ORDER BY joins - leaves + bonus) rank ' \
+                'FROM invites WHERE guild_id = $1 ORDER BY joins - leaves + bonus DESC'
+        res = await postgres.fetchall(query, ctx.guild.id)
+        if not res:
+            return await ctx.send('No invites found.')
+        invites = [res[i:i + 5] for i in range(0, len(res), 5)]
+        total = len(invites)
+        try:
+            invites = invites[page - 1]
+        except IndexError:
+            return await ctx.send('That page does not exist.')
+        desc = '\n\n'.join(
+            [f'__**Rank {i["rank"]}**__\n<@{i["member_id"]}>\n`{from_record(i)}` Invites' for i in invites]
+        )
+        embed = discord.Embed(
+            title=f'Invites Leaderboard',
+            color=ctx.author.color,
+            description=desc
+        )
+        embed.set_author(name=f'Page {page}/{total}', icon_url=str(ctx.guild.icon_url_as(format='png')))
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['createrank'])
@@ -154,6 +183,28 @@ class Ranks(commands.Cog):
             await postgres.execute(query, res['id'])
             await ctx.send(f'Deleted rank with role `{arg.name}`.')
 
+    @commands.command(aliases=['bonus', 'add'])
+    @commands.has_guild_permissions(administrator=True)
+    async def addinvites(self, ctx, member: discord.Member, amount: int):
+        if amount < 1:
+            return await ctx.send('Amount of invites must be positive.')
+        query = 'INSERT INTO invites (guild_id, member_id, joins, leaves, bonus) ' \
+                'VALUES ($1, $2, $3, $3, $4) ON CONFLICT (guild_id, member_id) ' \
+                'DO UPDATE SET bonus = invites.bonus + $4'
+        await postgres.execute(query, ctx.guild.id, member.id, 0, amount)
+        await ctx.send(f'I gave **{amount}** extra invites to `{member}`.')
 
+    @commands.command(aliases=['rem', 'remove', 'removeinvites'])
+    @commands.has_guild_permissions(administrator=True)
+    async def reminvites(self, ctx, member: discord.Member, amount: int):
+        if amount < 1:
+            return await ctx.send('Amount of invites must be positive.')
+        query = 'INSERT INTO invites (guild_id, member_id, joins, leaves, bonus) ' \
+                'VALUES ($1, $2, $3, $3, $4) ON CONFLICT (guild_id, member_id) ' \
+                'DO UPDATE SET bonus = invites.bonus + $4'
+        await postgres.execute(query, ctx.guild.id, member.id, 0, -amount)
+        await ctx.send(f'I removed **{amount}** extra invites from `{member}`.')
+
+        
 def setup(bot):
     bot.add_cog(Ranks(bot))
