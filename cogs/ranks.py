@@ -205,6 +205,6 @@ class Ranks(commands.Cog):
         await postgres.execute(query, ctx.guild.id, member.id, 0, -amount)
         await ctx.send(f'I removed **{amount}** extra invites from `{member}`.')
 
-        
+
 def setup(bot):
     bot.add_cog(Ranks(bot))

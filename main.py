@@ -1,12 +1,12 @@
 from discord.ext import commands 
 from config import TOKEN
-from cogs.listeners import Listeners
 import discord
 import postgres
 import asyncio
 
 
 STORMTORCH = 553058885418876928
+
 
 async def load_prefixes():
     await postgres.create_tables()
@@ -24,11 +24,16 @@ cached_prefixes = asyncio.get_event_loop().run_until_complete(load_prefixes())
 
 def get_prefix(client, message):
     prefix = client.prefixes.get(message.guild.id)
-    prefix = prefix if prefix else 'ii!'
-    return prefix
+    prefix = prefix if prefix else '!!'
+    return commands.when_mentioned_or(prefix)(client, message)
 
 
-bot = commands.Bot(command_prefix=get_prefix)
+bot = commands.Bot(
+    command_prefix=get_prefix,
+    case_insensitive=True,
+    activity=discord.Game("with miku's pp \U0001f633"),
+    help_command=None
+)
 bot.prefixes = cached_prefixes  # botvar with all cached prefixes
 cogs = (
     'cogs.config',
