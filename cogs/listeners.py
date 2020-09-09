@@ -28,9 +28,9 @@ class Listeners(commands.Cog):
                     old_i += 1
                     new_i += 1
             elif old_invites[old_i].id < new_invites[new_i].id:
-                old_invites += 1
+                old_i += 1
             else:
-                new_invites += 1
+                new_i += 1
         return None
 
     @staticmethod

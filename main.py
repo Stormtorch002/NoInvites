@@ -5,7 +5,10 @@ import postgres
 import asyncio
 
 
-STORMTORCH = 553058885418876928
+def jayti_or_stormtorch():
+    def predicate(ctx):
+        return ctx.message.author.id in (553058885418876928, 576187414033334282)
+    return commands.check(predicate)
 
 
 async def load_prefixes():
@@ -32,6 +35,7 @@ bot = commands.Bot(
     command_prefix=get_prefix,
     case_insensitive=True,
     activity=discord.Game("with miku's pp \U0001f633"),
+    status=discord.Status.dnd,
     help_command=None
 )
 bot.prefixes = cached_prefixes  # botvar with all cached prefixes
@@ -45,14 +49,18 @@ cogs = (
 
 
 @bot.command()
+async def _help(ctx):
+    await ctx.send('<https://docs.google.com/document/d/1X2rvN_TEAtOiNBfhMjc40DnexJVQcxWsun-oBC5wqks/edit>')
+
+
+@bot.command()
 async def stupid(ctx):
     await ctx.send('stormtorch is stupid :thumbsup:')
 
 
 @bot.command(name='eval')
+@jayti_or_stormtorch()
 async def _eval(ctx, *, code):
-    if ctx.author.id != STORMTORCH:
-        return await ctx.send('no u')
     code = '\n'.join([f'    {line}' for line in code.splitlines()])
     exec(
         f'async def __ex(ctx, bot):\n' +
