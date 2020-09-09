@@ -22,44 +22,54 @@ async def update_ranks(member):
             'WHERE guild_id = $1 AND invites <= $2 ORDER BY invites'
     res = await postgres.fetchall(query, member.guild.id, invites)
     ranks = [rank['role_id'] for rank in res]
+    if ranks:
+
+        query = 'SELECT id FROM stack_guilds WHERE guild_id = $1'
+        res = await postgres.fetchone(query, member.guild.id)
+        stack = True if res else False
+
+        if stack:
+            roles = []
+            for role_id in ranks:
+                role = member.guild.get_role(role_id)
+                if role:
+                    if role not in member.roles:
+                        roles.append(role)
+                else:
+                    query = 'DELETE FROM ranks WHERE role_id = $1'
+                    await postgres.execute(query, role_id)
+            await member.add_roles(*roles)
+        else:
+            top_role_id = ranks[-1]
+            top_role = member.guild.get_role(top_role_id)
+            if top_role:
+                if top_role not in member.roles:
+                    await member.add_roles(top_role)
+            else:
+                query = 'DELETE FROM ranks WHERE role_id = $1'
+                await postgres.execute(query, top_role_id)
+            ranks.remove(top_role_id)
+            removed = []
+            for role_id in ranks:
+                role = member.guild.get_role(role_id)
+                if role:
+                    if role in member.roles:
+                        removed.append(role)
+                else:
+                    query = 'DELETE FROM ranks WHERE role_id = $1'
+                    await postgres.execute(query, role_id)
+            await member.remove_roles(*removed)
+
+    query = 'SELECT role_id, invites FROM ranks ' \
+            'WHERE guild_id = $1 AND invites > $2 ORDER BY invites'
+    print('yo')
+    res = await postgres.fetchall(query, member.guild.id, invites)
+    ranks = [rank['role_id'] for rank in res]
     if not ranks:
         return
-
-    query = 'SELECT id FROM stack_guilds WHERE guild_id = $1'
-    res = await postgres.fetchone(query, member.guild.id)
-    stack = True if res else False
-
-    if stack:
-        roles = []
-        for role_id in ranks:
-            role = member.guild.get_role(role_id)
-            if role:
-                if role not in member.roles:
-                    roles.append(role)
-            else:
-                query = 'DELETE FROM ranks WHERE role_id = $1'
-                await postgres.execute(query, role_id)
-        await member.add_roles(*roles)
-    else:
-        top_role_id = ranks[-1]
-        top_role = member.guild.get_role(top_role_id)
-        if top_role:
-            if top_role not in member.roles:
-                await member.add_roles(top_role)
-        else:
-            query = 'DELETE FROM ranks WHERE role_id = $1'
-            await postgres.execute(query, top_role_id)
-        ranks.remove(top_role_id)
-        removed = []
-        for role_id in ranks:
-            role = member.guild.get_role(role_id)
-            if role:
-                if role in member.roles:
-                    removed.append(role)
-            else:
-                query = 'DELETE FROM ranks WHERE role_id = $1'
-                await postgres.execute(query, role_id)
-        await member.remove_roles(*removed)
+    roles = [member.guild.get_role(role_id) for role_id in ranks]
+    roles = [role for role in roles if role in member.roles]
+    await member.remove_roles(*roles)
 
 
 class Ranks(commands.Cog):
@@ -70,7 +80,7 @@ class Ranks(commands.Cog):
     @commands.command(aliases=['invites'])
     async def rank(self, ctx, *, member: discord.Member = None):
         member = member or ctx.author
-        query = 'SELECT joins, leaves, bonus, FROM invites WHERE guild_id = $1 AND member_id = $2'
+        query = 'SELECT joins, leaves, bonus FROM invites WHERE guild_id = $1 AND member_id = $2'
         res = await postgres.fetchone(query, ctx.guild.id, member.id)
         if not res:
             return await ctx.send('You have no invites.')
@@ -201,6 +211,7 @@ class Ranks(commands.Cog):
                 'VALUES ($1, $2, $3, $3, $4) ON CONFLICT (guild_id, member_id) ' \
                 'DO UPDATE SET bonus = invites.bonus + $4'
         await postgres.execute(query, ctx.guild.id, member.id, 0, -amount)
+        await update_ranks(member)
         await ctx.send(f'I removed **{amount}** extra invites from `{member}`.')
 
 
