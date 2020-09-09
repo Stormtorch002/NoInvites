@@ -95,7 +95,7 @@ class Listeners(commands.Cog):
             invites = await self.update_join_invites(invite, member)
             if invite.inviter.id in [m.id for m in member.guild.members]:
                 inviter = member.guild.get_member(invite.inviter.id)
-                await ranks.update_join_ranks(inviter)
+                await ranks.update_ranks(inviter)
             await self.send_member_message(member, invite.inviter, invites, 1)
 
     @commands.Cog.listener()
@@ -110,7 +110,7 @@ class Listeners(commands.Cog):
             inviter = inviter or await self.bot.fetch_user(inviter_id)
             if inviter.id in [m.id for m in member.guild.members]:
                 inviter = member.guild.get_member(inviter.id)
-                await ranks.update_join_ranks(inviter)
+                await ranks.update_ranks(inviter)
             invites = await ranks.get_total_invites(inviter, member.guild)
             await self.send_member_message(member, inviter, invites, 0)
 

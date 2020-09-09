@@ -16,7 +16,7 @@ async def get_total_invites(user, guild):
     return from_record(res)
 
 
-async def update_join_ranks(member):
+async def update_ranks(member):
     invites = await get_total_invites(member, member.guild)
     query = 'SELECT role_id, invites FROM ranks ' \
             'WHERE guild_id = $1 AND invites <= $2 ORDER BY invites'
@@ -70,9 +70,7 @@ class Ranks(commands.Cog):
     @commands.command(aliases=['invites'])
     async def rank(self, ctx, *, member: discord.Member = None):
         member = member or ctx.author
-        query = 'SELECT joins, leaves, bonus, ' \
-                'RANK () OVER (ORDER BY joins - leaves + bonus) rank ' \
-                'FROM invites WHERE guild_id = $1 AND member_id = $2'
+        query = 'SELECT joins, leaves, bonus, FROM invites WHERE guild_id = $1 AND member_id = $2'
         res = await postgres.fetchone(query, ctx.guild.id, member.id)
         if not res:
             return await ctx.send('You have no invites.')
@@ -95,16 +93,15 @@ class Ranks(commands.Cog):
                         f'**Bonuses:** `{res["bonus"]}`\n\n'
                         + text
         )
-        embed.add_field(name='Rank', value=f'**{res["rank"]}**')
         embed.set_thumbnail(url=str(ctx.guild.icon_url_as(format='png')))
         embed.set_author(name=str(member), icon_url=str(member.avatar_url_as(format='png')))
-        await update_join_ranks(member)
+        await update_ranks(member)
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['leaderboard', 'top'])
     async def lb(self, ctx, page: int = 1):
         query = 'SELECT member_id, joins, leaves, bonus, ' \
-                'RANK () OVER (ORDER BY joins - leaves + bonus) rank ' \
+                'RANK () OVER (ORDER BY joins - leaves + bonus DESC) rank ' \
                 'FROM invites WHERE guild_id = $1 ORDER BY joins - leaves + bonus DESC'
         res = await postgres.fetchall(query, ctx.guild.id)
         if not res:
@@ -192,6 +189,7 @@ class Ranks(commands.Cog):
                 'VALUES ($1, $2, $3, $3, $4) ON CONFLICT (guild_id, member_id) ' \
                 'DO UPDATE SET bonus = invites.bonus + $4'
         await postgres.execute(query, ctx.guild.id, member.id, 0, amount)
+        await update_ranks(member)
         await ctx.send(f'I gave **{amount}** extra invites to `{member}`.')
 
     @commands.command(aliases=['rem', 'remove', 'removeinvites'])

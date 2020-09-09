@@ -48,7 +48,7 @@ cogs = (
 [bot.load_extension(cog) for cog in cogs]
 
 
-@bot.command()
+@bot.command(name='help')
 async def _help(ctx):
     await ctx.send('<https://docs.google.com/document/d/1X2rvN_TEAtOiNBfhMjc40DnexJVQcxWsun-oBC5wqks/edit>')
 
