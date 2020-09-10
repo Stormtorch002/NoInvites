@@ -1,11 +1,12 @@
 from discord.ext import commands
 import postgres
 import discord
-import asyncio
 from typing import Union
 
 
 def from_record(record):
+    if not record:
+        return 0
     joins, leaves, bonus = record['joins'], record['leaves'], record['bonus']
     return joins - leaves + bonus
 
