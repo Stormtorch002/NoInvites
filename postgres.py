@@ -42,7 +42,7 @@ async def create_tables():
             "channel_id" BIGINT,
             "message" TEXT,
             "type" SMALLINT,
-            UNIQUE (channel_id, type)
+            UNIQUE (guild_id, type)
         )''',  # for type, 1 is join, 0 is leave
         '''CREATE TABLE IF NOT EXISTS ranks (
             "id" SERIAL PRIMARY KEY,

@@ -135,32 +135,11 @@ class Ranks(commands.Cog):
 
     @commands.command(aliases=['createrank'])
     @commands.has_guild_permissions(administrator=True)
-    async def addrank(self, ctx):
-
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel
-
-        await ctx.send('What role should people get when they reach this rank?')
-        try:
-            role = (await self.bot.wait_for('message', check=check, timeout=30)).content
-        except asyncio.TimeoutError:
-            return await ctx.send(f'{ctx.author.mention} wake up and try again')
-        try:
-            role = await commands.RoleConverter().convert(ctx, role)
-        except commands.BadArgument:
-            return await ctx.send(f'Could not make a role out of `{role}`.')
+    async def addrank(self, ctx, *, role: discord.Role, invites: int):
         query = 'SELECT id FROM ranks WHERE role_id = $1'
         res = await postgres.fetchone(query, role.id)
         if res:
             return await ctx.send(f'An invite rank with `{role.name}` role already exists.')
-
-        await ctx.send('How many invites do they need to get this rank?')
-        try:
-            invites = (await self.bot.wait_for('message', check=check, timeout=30)).content
-        except asyncio.TimeoutError:
-            return await ctx.send(f'{ctx.author.mention} wake up and try again')
-        if not invites.isdigit() or int(invites) < 1:
-            return await ctx.send(f'Invalid number of invites.')
         query = 'SELECT id FROM ranks WHERE invites = $1 AND guild_id = $2'
         res = await postgres.fetchone(query, int(invites), ctx.guild.id)
         if res:

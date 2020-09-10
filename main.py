@@ -27,8 +27,9 @@ cached_prefixes = asyncio.get_event_loop().run_until_complete(load_prefixes())
 
 def get_prefix(client, message):
     prefix = client.prefixes.get(message.guild.id)
-    prefix = prefix if prefix else '!!'
-    return commands.when_mentioned_or(prefix)(client, message)
+    return '!'
+    # prefix = prefix if prefix else '!'
+    # return commands.when_mentioned_or(prefix)(client, message)
 
 
 bot = commands.Bot(
@@ -43,7 +44,7 @@ cogs = (
     'cogs.config',
     'cogs.listeners',
     'cogs.ranks',
-    'jishaku'
+    # 'jishaku'
 )
 [bot.load_extension(cog) for cog in cogs]
 

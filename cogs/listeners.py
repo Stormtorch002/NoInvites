@@ -33,14 +33,19 @@ class Listeners(commands.Cog):
                 new_i += 1
         return None
 
-    @staticmethod
-    async def update_join_invites(invite, member):
+    async def update_join_invites(self, invite, member):
         query = 'INSERT INTO joins (guild_id, member_id, inviter_id) VALUES ($1, $2, $3)'
         await postgres.execute(query, member.guild.id, member.id, invite.inviter.id)
-        query = 'INSERT INTO invites (guild_id, member_id, joins, leaves, bonus) ' \
-                'VALUES ($1, $2, $3, $4, $4) ON CONFLICT (guild_id, member_id) ' \
-                'DO UPDATE SET joins = invites.joins + $3'
-        await postgres.execute(query, member.guild.id, invite.inviter.id, 1, 0)
+        query = 'SELECT id FROM invites WHERE guild_id = $1 AND member_id = $2'
+        res = await postgres.fetchone(query, member.guild.id, invite.inviter.id)
+        if res:
+            query = 'UPDATE invites SET joins = invites.joins + $1 WHERE guild_id = $2 AND member_id = $3'
+            await postgres.execute(query, 1, member.guild.id, invite.inviter.id)
+        else:
+            query = 'INSERT INTO invites (guild_id, member_id, joins, leaves, bonus) ' \
+                    'VALUES ($1, $2, $3, $4, $4)'
+            uses = sum([invite.uses for invite in self.invites[member.guild]])
+            await postgres.execute(query, member.guild.id, invite.inviter.id, uses, 0)
         return await ranks.get_total_invites(invite.inviter, member.guild)
 
     async def send_member_message(self, member, inviter, invites, ch_type):
