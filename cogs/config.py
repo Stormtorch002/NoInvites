@@ -22,7 +22,7 @@ class Config(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def join(self, ctx, channel: discord.TextChannel, *, message):
         query = 'INSERT INTO channels (guild_id, channel_id, message, type) VALUES ($1, $2, $3, $4) ' \
-                'ON CONFLICT (channel_id, type) DO UPDATE SET channel_id = $2, message = $3'
+                'ON CONFLICT (guild_id, type) DO UPDATE SET channel_id = $2, message = $3'
         await postgres.execute(query, ctx.guild.id, channel.id, message, 1)
         await ctx.send(f'Linked join messages to {channel.mention}.')
 
@@ -30,7 +30,7 @@ class Config(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def leave(self, ctx, channel: discord.TextChannel, *, message):
         query = 'INSERT INTO channels (guild_id, channel_id, message, type) VALUES ($1, $2, $3, $4) ' \
-                'ON CONFLICT (channel_id, type) DO UPDATE SET channel_id = $2, message = $3'
+                'ON CONFLICT (guild_id, type) DO UPDATE SET channel_id = $2, message = $3'
         await postgres.execute(query, ctx.guild.id, channel.id, message, 0)
         await ctx.send(f'Linked leave messages to {channel.mention}.')
 
