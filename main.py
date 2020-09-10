@@ -27,7 +27,7 @@ cached_prefixes = asyncio.get_event_loop().run_until_complete(load_prefixes())
 
 def get_prefix(client, message):
     prefix = client.prefixes.get(message.guild.id)
-    prefix = prefix if prefix else '!'
+    prefix = prefix if prefix else '!!'
     return commands.when_mentioned_or(prefix)(client, message)
 
 
