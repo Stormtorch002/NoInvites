@@ -44,7 +44,7 @@ class Listeners(commands.Cog):
         else:
             query = 'INSERT INTO invites (guild_id, member_id, joins, leaves, bonus) ' \
                     'VALUES ($1, $2, $3, $4, $4)'
-            uses = sum([invite.uses for invite in self.invites[member.guild]])
+            uses = sum([i.uses for i in self.invites[member.guild] if i.inviter.id == invite.inviter.id])
             await postgres.execute(query, member.guild.id, invite.inviter.id, uses, 0)
         return await ranks.get_total_invites(invite.inviter, member.guild)
 
